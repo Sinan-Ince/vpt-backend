@@ -10,7 +10,9 @@ public class VehicleSearch
 
     public string Model { get; set; } = string.Empty;
 
-    public int Year { get; set; }
+    public int MinYear { get; set; }
+
+    public int MaxYear { get; set; }
 
     public int? MaxMileage { get; set; }
 

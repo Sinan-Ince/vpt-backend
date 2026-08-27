@@ -7,13 +7,21 @@ public class MockListingSource : IListingSource
     private static readonly (string Brand, string Model)[] Catalog =
     {
         ("Toyota", "Corolla"),
+        ("Toyota", "Yaris"),
         ("Volkswagen", "Golf"),
+        ("Volkswagen", "Passat"),
         ("Renault", "Clio"),
+        ("Renault", "Megane"),
         ("Fiat", "Egea"),
+        ("Fiat", "Panda"),
         ("Ford", "Focus"),
+        ("Ford", "Fiesta"),
         ("Honda", "Civic"),
+        ("Honda", "CR-V"),
         ("Hyundai", "i20"),
+        ("Hyundai", "Tucson"),
         ("Opel", "Astra"),
+        ("Opel", "Corsa"),
     };
 
     private readonly Random _random = new();

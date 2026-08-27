@@ -17,7 +17,11 @@ public class CreateVehicleSearchDto
 
     [Required]
     [Range(1900, 2100)]
-    public int Year { get; set; }
+    public int MinYear { get; set; }
+
+    [Required]
+    [Range(1900, 2100)]
+    public int MaxYear { get; set; }
 
     public int? MaxMileage { get; set; }
 

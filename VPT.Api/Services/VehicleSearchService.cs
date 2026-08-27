@@ -23,7 +23,8 @@ public class VehicleSearchService : IVehicleSearchService
             UserId = dto.UserId,
             Brand = dto.Brand,
             Model = dto.Model,
-            Year = dto.Year,
+            MinYear = dto.MinYear,
+            MaxYear = dto.MaxYear,
             MaxMileage = dto.MaxMileage,
             MaxPrice = dto.MaxPrice,
             FuelType = dto.FuelType
@@ -104,7 +105,8 @@ public class VehicleSearchService : IVehicleSearchService
         vehicleSearch.UserId = dto.UserId;
         vehicleSearch.Brand = dto.Brand;
         vehicleSearch.Model = dto.Model;
-        vehicleSearch.Year = dto.Year;
+        vehicleSearch.MinYear = dto.MinYear;
+        vehicleSearch.MaxYear = dto.MaxYear;
         vehicleSearch.MaxMileage = dto.MaxMileage;
         vehicleSearch.MaxPrice = dto.MaxPrice;
         vehicleSearch.FuelType = dto.FuelType;
@@ -139,7 +141,8 @@ public class VehicleSearchService : IVehicleSearchService
             UserId = vehicleSearch.UserId,
             Brand = vehicleSearch.Brand,
             Model = vehicleSearch.Model,
-            Year = vehicleSearch.Year,
+            MinYear = vehicleSearch.MinYear,
+            MaxYear = vehicleSearch.MaxYear,
             MaxMileage = vehicleSearch.MaxMileage,
             MaxPrice = vehicleSearch.MaxPrice,
             FuelType = vehicleSearch.FuelType
