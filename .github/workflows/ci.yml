@@ -57,3 +57,6 @@ jobs:
           script: |
             sudo k3s kubectl rollout restart deployment/backend
             sudo k3s kubectl rollout status deployment/backend
+
+
+
