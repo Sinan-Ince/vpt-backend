@@ -55,6 +55,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            sudo k3s kubectl patch deployment backend --type merge -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
             sudo k3s kubectl rollout restart deployment/backend
             sudo k3s kubectl rollout status deployment/backend
 
