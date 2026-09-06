@@ -4,9 +4,40 @@ on:
   push:
     branches: [master]
 
+  pull_request:
+    branches: [master]
+
 jobs:
-  build-and-push:
+
+  validate:
+    name: Validate backend
     runs-on: ubuntu-latest
+
+    steps:
+      # Repository kodunu runner'a indirir.
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Proje net10.0 kullandigi icin .NET 10 SDK kurulur.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # NuGet dependency'lerini indirir.
+      - name: Restore dependencies
+        run: dotnet restore VPT.slnx
+
+      # Release konfigurasyonunda compile eder.
+      # Restore zaten onceki adimda yapildigi icin tekrar yapmaz.
+      - name: Build
+        run: dotnet build VPT.slnx --configuration Release --no-restore
+
+  build-smoke-and-push:
+    name: Build, smoke test and push Docker image
+    needs: validate
+    runs-on: ubuntu-latest
+
     permissions:
       contents: read
       packages: write
@@ -15,46 +46,123 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Docker image'i once sadece CI runner uzerinde olusturuyoruz.
+      # Henuz GHCR'a push edilmiyor.
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t vpt-backend:ci \
+            ./VPT.Api
+
+      # Gercek deployment'a benzer sekilde gecici PostgreSQL + API
+      # container'lari calistiriyoruz.
+      - name: Start smoke test environment
+        run: |
+          docker network create vpt-ci
+
+          docker run -d \
+            --name vpt-postgres \
+            --network vpt-ci \
+            -e POSTGRES_DB=vehiclepricetrackerdb \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=ci-test-password \
+            postgres:16
+
+          echo "Waiting for PostgreSQL..."
+
+          postgres_ready=false
+
+          for i in {1..30}; do
+            if docker exec vpt-postgres \
+              pg_isready \
+              -U postgres \
+              -d vehiclepricetrackerdb; then
+
+              postgres_ready=true
+              break
+            fi
+
+            sleep 2
+          done
+
+          if [ "$postgres_ready" != "true" ]; then
+            echo "PostgreSQL did not become ready."
+            exit 1
+          fi
+
+          docker run -d \
+            --name vpt-api \
+            --network vpt-ci \
+            -p 5202:8080 \
+            -e 'ConnectionStrings__DefaultConnection=Host=vpt-postgres;Port=5432;Database=vehiclepricetrackerdb;Username=postgres;Password=ci-test-password' \
+            vpt-backend:ci
+
+      # API gerçekten HTTP istegine cevap verene kadar bekliyoruz.
+      - name: Smoke test API
+        run: |
+          echo "Waiting for API..."
+
+          api_healthy=false
+
+          for i in {1..30}; do
+            if curl -fsS http://localhost:5202/health; then
+              api_healthy=true
+              break
+            fi
+
+            sleep 2
+          done
+
+          if [ "$api_healthy" != "true" ]; then
+            echo "API health check failed."
+            exit 1
+          fi
+
+          echo "Smoke test passed."
+
+      # Smoke test fail ederse debugging icin container loglarini goster.
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          echo "=== API logs ==="
+          docker logs vpt-api || true
+
+          echo "=== PostgreSQL logs ==="
+          docker logs vpt-postgres || true
+
+      # Test container'larini her durumda runner'dan temizle.
+      - name: Clean up smoke test environment
+        if: always()
+        run: |
+          docker rm -f vpt-api || true
+          docker rm -f vpt-postgres || true
+          docker network rm vpt-ci || true
+
+      # Pull Request'te image publish edilmez.
+      # Sadece master'a push yapildiginda GHCR'a giris yapilir.
       - name: Log in to GHCR
+        if: github.event_name == 'push'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./VPT.Api
-          push: true
-          tags: ghcr.io/sinan-ince/vpt-backend:latest
+      # 2. adimda ekledigimiz SHA + latest taglerini kullanarak
+      # smoke testten gecen AYNI image'i registry'ye push ediyoruz.
+      - name: Tag and push image
+        if: github.event_name == 'push'
+        run: |
+          docker tag \
+            vpt-backend:ci \
+            ghcr.io/sinan-ince/vpt-backend:${{ github.sha }}
 
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            docker compose pull
-            docker compose up -d
+          docker tag \
+            vpt-backend:ci \
+            ghcr.io/sinan-ince/vpt-backend:latest
 
-  deploy-k3s:
-    needs: build-and-push
-    if: vars.DEPLOY_K3S == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to k3s
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.K3S_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            sudo k3s kubectl patch deployment backend --type merge -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
-            sudo k3s kubectl rollout restart deployment/backend
-            sudo k3s kubectl rollout status deployment/backend
+          docker push \
+            ghcr.io/sinan-ince/vpt-backend:${{ github.sha }}
+
+          docker push \
+            ghcr.io/sinan-ince/vpt-backend:latest
